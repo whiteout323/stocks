@@ -23,7 +23,7 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install requests python-dotenv pandas numpy twilio
+        run: pip install -r requirements.txt
 
       - name: Run scanner
         env:
@@ -48,9 +48,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main  # Get the latest commit with scan data
-
-      - name: Pull latest changes
-        run: git pull origin main
 
       - uses: actions/configure-pages@v4
 
