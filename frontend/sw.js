@@ -1,10 +1,11 @@
-const CACHE_NAME = "spy-scanner-v2";
+const CACHE_NAME = "spy-scanner-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./spy-momentum-scanner.js",
   "./swing-trader-dashboard.js",
   "./live-scan.js",
+  "./portfolio.js",
   "./app.js",
   "./manifest.json",
 ];

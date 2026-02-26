@@ -6,6 +6,7 @@ function App() {
 
   const tabs = [
     { key: 'live', label: 'LIVE SCAN' },
+    { key: 'portfolio', label: 'PORTFOLIO' },
     { key: 'scanner', label: 'SCANNER' },
     { key: 'swing', label: 'SWING' },
   ];
@@ -32,6 +33,7 @@ function App() {
       </div>
 
       {activeTab === 'live' && React.createElement(window.LiveScanView)}
+      {activeTab === 'portfolio' && React.createElement(window.PortfolioView)}
       {activeTab === 'scanner' && React.createElement(window.SpyMomentumScanner)}
       {activeTab === 'swing' && React.createElement(window.SwingTraderDashboard)}
     </div>
