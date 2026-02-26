@@ -22,7 +22,6 @@ function PortfolioView() {
   const [showClose, setShowClose] = useStatePort(null);
   const [closePrice, setClosePrice] = useStatePort('');
   const [form, setForm] = useStatePort({ ticker: '', buyPrice: '', shares: '', date: new Date().toISOString().slice(0, 10) });
-  const [source, setSource] = useStatePort('loading');
 
   // Load scan data for live prices
   useEffectPort(() => {
@@ -51,14 +50,10 @@ function PortfolioView() {
 
           if (!cancelled) {
             if (localCount > remoteCount) {
-              // Local has trades not yet persisted to GitHub — keep local
               setPortfolio(local);
-              setSource('local');
             } else {
-              // Remote is up to date — use it and cache
               setPortfolio(remote);
               saveLocal(remote);
-              setSource('synced');
             }
           }
           return;
@@ -69,9 +64,6 @@ function PortfolioView() {
       const local = loadLocal();
       if (!cancelled && local) {
         setPortfolio(local);
-        setSource('local');
-      } else if (!cancelled) {
-        setSource('empty');
       }
     }
 
@@ -84,7 +76,6 @@ function PortfolioView() {
     setPortfolio(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
       saveLocal(next);
-      setSource('local');
       return next;
     });
   }, []);
@@ -165,14 +156,12 @@ function PortfolioView() {
       <div style={{ marginBottom: 14, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{
           width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
-          background: source === 'synced' ? '#4ade80' : source === 'local' ? '#fbbf24' : '#555',
+          background: portfolio.positions.length > 0 || portfolio.history.length > 0 ? '#4ade80' : '#555',
         }} />
         <span style={{ color: '#555' }}>
-          {source === 'synced' ? 'Synced with GitHub' : source === 'local' ? 'Saved locally' : 'Loading...'}
+          {portfolio.positions.length > 0 ? `${portfolio.positions.length} open` : 'No positions'}
+          {portfolio.history.length > 0 ? ` \u00b7 ${portfolio.history.length} closed` : ''}
         </span>
-        {source === 'local' && portfolio.positions.length > 0 && (
-          <span style={{ color: '#666' }}> — persist via Actions &rarr; Manage Trade</span>
-        )}
       </div>
 
       {/* Account value card */}
@@ -413,7 +402,8 @@ function PortfolioView() {
           <div style={{ fontSize: 36, marginBottom: 12 }}>$</div>
           <div style={{ fontSize: 17, color: '#888', fontWeight: 600, marginBottom: 6 }}>No positions yet</div>
           <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6 }}>
-            Check the Scan tab, then tap + Add to log your trades.
+            Check the Scan tab for buys, then<br/>
+            tap + Add to log your trades.
           </div>
         </div>
       )}
