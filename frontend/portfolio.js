@@ -249,13 +249,59 @@ function PortfolioView() {
                     ))}
                   </div>
 
-                  {/* Scanner note */}
-                  {sig && sig.action_note && (
+                  {/* EXIT ALERT — scanner says sell/bearish on something you hold */}
+                  {sig && sig.signal_strength <= -3 && (
+                    <div style={{
+                      padding: '12px 14px', borderRadius: 10, marginBottom: 10,
+                      background: '#2e0505', border: '1px solid rgba(248,113,113,0.3)',
+                    }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: '#f87171', marginBottom: 4 }}>
+                        EXIT SIGNAL
+                      </div>
+                      <div style={{ fontSize: 13, color: '#fca5a5', lineHeight: 1.5 }}>
+                        Scanner says {sig.signal}. Consider selling.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* HOLD signal — scanner still bullish */}
+                  {sig && sig.signal_strength >= 3 && (
+                    <div style={{
+                      padding: '10px 12px', borderRadius: 10, marginBottom: 10,
+                      background: '#052e16', border: '1px solid rgba(74,222,128,0.15)',
+                      fontSize: 13, color: '#86efac', lineHeight: 1.5,
+                    }}>
+                      Hold — {sig.action_note}
+                    </div>
+                  )}
+
+                  {/* Neutral — scanner note */}
+                  {sig && sig.signal_strength > -3 && sig.signal_strength < 3 && sig.action_note && (
                     <div style={{
                       padding: '10px 12px', borderRadius: 10, marginBottom: 10,
                       background: '#0a0a0a', fontSize: 12, color: '#888', lineHeight: 1.5,
                     }}>
                       {sig.action_note}
+                    </div>
+                  )}
+
+                  {/* Stop loss / target levels for held position */}
+                  {sig && (
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <div style={{
+                        flex: 1, padding: '8px', background: '#1a0a0a', borderRadius: 8, textAlign: 'center',
+                        border: '1px solid rgba(248,113,113,0.1)',
+                      }}>
+                        <div style={{ fontSize: 9, color: '#f87171', fontWeight: 700, marginBottom: 2 }}>STOP</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#fca5a5' }}>${sig.stop_loss.toFixed(2)}</div>
+                      </div>
+                      <div style={{
+                        flex: 1, padding: '8px', background: '#0a1a0a', borderRadius: 8, textAlign: 'center',
+                        border: '1px solid rgba(74,222,128,0.1)',
+                      }}>
+                        <div style={{ fontSize: 9, color: '#4ade80', fontWeight: 700, marginBottom: 2 }}>TARGET</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#86efac' }}>${sig.target_1.toFixed(2)}</div>
+                      </div>
                     </div>
                   )}
 
