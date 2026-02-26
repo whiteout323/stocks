@@ -1,0 +1,20 @@
+# Secrets
+.env
+
+# Data files
+open_positions.json
+scan_logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
