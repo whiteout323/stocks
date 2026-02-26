@@ -1,9 +1,6 @@
 # Secrets
 .env
 
-# Data files
-open_positions.json
-
 # Python
 __pycache__/
 *.pyc
