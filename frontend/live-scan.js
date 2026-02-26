@@ -94,7 +94,7 @@ function LiveScanView() {
       </div>
 
       {/* BUY section */}
-      {buys.length > 0 && (
+      {buys.length > 0 ? (
         <div style={{ marginBottom: 24 }}>
           <div style={{
             fontSize: 13, fontWeight: 700, color: '#4ade80', letterSpacing: '0.03em',
@@ -109,6 +109,19 @@ function LiveScanView() {
               order={buy_orders.find(o => o.ticker === sig.ticker)}
             />
           ))}
+        </div>
+      ) : (
+        <div style={{
+          padding: '20px', borderRadius: 16, marginBottom: 24,
+          background: '#111', border: '1px solid rgba(255,255,255,0.06)',
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 22, marginBottom: 8 }}>&#x2014;</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#888', marginBottom: 4 }}>No buys today</div>
+          <div style={{ fontSize: 13, color: '#555', lineHeight: 1.5 }}>
+            Nothing looks good right now. Cash is a position.{'\n'}
+            Check back tomorrow.
+          </div>
         </div>
       )}
 

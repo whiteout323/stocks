@@ -568,7 +568,7 @@ def generate_orders(signals, regime, account_size):
     open_tickers = set(positions.keys()) - exit_tickers
     candidates = [
         s for s in signals
-        if abs(s.signal_strength) >= 3
+        if s.signal_strength >= 3
         and s.ticker not in open_tickers
         and s.ticker not in exit_tickers
     ]
@@ -598,12 +598,8 @@ def generate_orders(signals, regime, account_size):
             reward = abs(sig.target_1 - sig.current_price)
             rr = f"{reward / sig.risk_per_share:.1f}:1" if sig.risk_per_share > 0 else "N/A"
 
-            if sig.signal_strength > 0:
-                action = "BUY"
-                opt = "SHARES — Market or limit order"
-            else:
-                action = "SHORT/AVOID"
-                opt = "SHARES — Avoid or wait for reversal"
+            action = "BUY"
+            opt = "SHARES — Market or limit order"
 
             buy_orders.append(Order(
                 action=action, ticker=sig.ticker, name=sig.name,
