@@ -101,7 +101,7 @@ ACCOUNT_SIZE = 1000       # default — override with --account
 
 # Resolve paths relative to the script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-POSITIONS_FILE = os.path.join(SCRIPT_DIR, "open_positions.json")
+PORTFOLIO_FILE = os.path.join(SCRIPT_DIR, "frontend", "data", "portfolio.json")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -181,45 +181,77 @@ class MarketRegime:
     spy_above_21ema: Optional[bool] = None
 
 
-# ─── POSITION TRACKER ───────────────────────────────────────────────────────────
+# ─── POSITION TRACKER (reads/writes frontend/data/portfolio.json) ──────────────
 
-def load_positions() -> dict:
-    if os.path.exists(POSITIONS_FILE):
+def _load_portfolio() -> dict:
+    """Load the full portfolio.json (starting_cash, positions, history)."""
+    if os.path.exists(PORTFOLIO_FILE):
         try:
-            with open(POSITIONS_FILE, "r") as f:
+            with open(PORTFOLIO_FILE, "r") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
-            return {}
-    return {}
+            pass
+    return {"starting_cash": 1000, "positions": [], "history": []}
 
 
-def save_positions(positions: dict):
-    dir_name = os.path.dirname(os.path.abspath(POSITIONS_FILE)) or "."
+def _save_portfolio(portfolio: dict):
+    """Atomically write portfolio.json."""
+    dir_name = os.path.dirname(os.path.abspath(PORTFOLIO_FILE))
+    os.makedirs(dir_name, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(positions, f, indent=2, cls=NumpyEncoder)
-        os.replace(tmp_path, POSITIONS_FILE)
+            json.dump(portfolio, f, indent=2, cls=NumpyEncoder)
+            f.write("\n")
+        os.replace(tmp_path, PORTFOLIO_FILE)
     except Exception:
-        os.unlink(tmp_path)
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
         raise
 
 
+def load_positions() -> dict:
+    """Load positions from portfolio.json, converting to scanner dict format.
+
+    Returns dict keyed by ticker: {entry_price, shares, stop_loss, target, direction, dollar_amount}
+    """
+    portfolio = _load_portfolio()
+    positions = {}
+    for p in portfolio.get("positions", []):
+        ticker = p.get("ticker", "")
+        if not ticker:
+            continue
+        positions[ticker] = {
+            "entry_price": p.get("buyPrice", 0),
+            "shares": p.get("shares", 0),
+            "stop_loss": p.get("stopLoss", 0),
+            "target": p.get("target", 0),
+            "direction": "LONG",
+            "dollar_amount": p.get("cost", 0),
+            "entry_date": p.get("date", ""),
+        }
+    return positions
+
+
 def add_position(ticker, entry_price, shares, stop_loss, target, direction, dollar_amount):
-    positions = load_positions()
-    positions[ticker] = {
-        "entry_price": entry_price, "shares": shares, "stop_loss": stop_loss,
-        "target": target, "direction": direction, "dollar_amount": dollar_amount,
-        "entry_date": datetime.now().isoformat(),
-    }
-    save_positions(positions)
+    portfolio = _load_portfolio()
+    portfolio["positions"].append({
+        "id": int(datetime.now().timestamp() * 1000),
+        "ticker": ticker,
+        "buyPrice": entry_price,
+        "shares": shares,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "cost": round(entry_price * shares, 2),
+        "stopLoss": stop_loss,
+        "target": target,
+    })
+    _save_portfolio(portfolio)
 
 
 def remove_position(ticker):
-    positions = load_positions()
-    if ticker in positions:
-        del positions[ticker]
-        save_positions(positions)
+    portfolio = _load_portfolio()
+    portfolio["positions"] = [p for p in portfolio["positions"] if p.get("ticker") != ticker]
+    _save_portfolio(portfolio)
 
 
 # ─── DATA CLIENTS ───────────────────────────────────────────────────────────────
