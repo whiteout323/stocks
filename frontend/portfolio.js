@@ -1,13 +1,28 @@
-/* Portfolio Tracker — reads static portfolio.json, trades managed via GitHub Actions */
-const { useState: useStatePort, useEffect: useEffectPort, useMemo: useMemoPort } = React;
+/* Portfolio Tracker — localStorage for instant UI, pulls from portfolio.json on reload */
+const { useState: useStatePort, useEffect: useEffectPort, useMemo: useMemoPort, useCallback: useCallbackPort } = React;
 
+const LS_KEY = 'spy-scanner-portfolio';
 const EMPTY_PORTFOLIO = { starting_cash: 1000, positions: [], history: [] };
+
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveLocal(portfolio) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(portfolio)); } catch {}
+}
 
 function PortfolioView() {
   const [portfolio, setPortfolio] = useStatePort(EMPTY_PORTFOLIO);
   const [scanData, setScanData] = useStatePort(null);
-  const [loading, setLoading] = useStatePort(true);
-  const [lastUpdated, setLastUpdated] = useStatePort(null);
+  const [showAdd, setShowAdd] = useStatePort(false);
+  const [showClose, setShowClose] = useStatePort(null);
+  const [closePrice, setClosePrice] = useStatePort('');
+  const [form, setForm] = useStatePort({ ticker: '', buyPrice: '', shares: '', date: new Date().toISOString().slice(0, 10) });
+  const [source, setSource] = useStatePort('loading');
 
   // Load scan data for live prices
   useEffectPort(() => {
@@ -17,19 +32,61 @@ function PortfolioView() {
       .catch(() => {});
   }, []);
 
-  // Load portfolio from static file (deployed by GitHub Pages)
+  // On load: fetch portfolio.json (source of truth from GitHub Pages).
+  // If it has positions/history, use it and cache to localStorage.
+  // If fetch fails (offline), fall back to localStorage.
   useEffectPort(() => {
-    fetch('data/portfolio.json')
-      .then(r => {
-        if (!r.ok) throw new Error('not found');
-        return r.json();
-      })
-      .then(data => {
-        setPortfolio(data);
-        setLastUpdated(data.last_updated || null);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch('data/portfolio.json');
+        if (res.ok) {
+          const remote = await res.json();
+          const local = loadLocal();
+
+          // Merge: use whichever has more data (positions + history count)
+          const remoteCount = (remote.positions?.length || 0) + (remote.history?.length || 0);
+          const localCount = local ? (local.positions?.length || 0) + (local.history?.length || 0) : 0;
+
+          if (!cancelled) {
+            if (localCount > remoteCount) {
+              // Local has trades not yet persisted to GitHub — keep local
+              setPortfolio(local);
+              setSource('local');
+            } else {
+              // Remote is up to date — use it and cache
+              setPortfolio(remote);
+              saveLocal(remote);
+              setSource('synced');
+            }
+          }
+          return;
+        }
+      } catch {}
+
+      // Offline fallback
+      const local = loadLocal();
+      if (!cancelled && local) {
+        setPortfolio(local);
+        setSource('local');
+      } else if (!cancelled) {
+        setSource('empty');
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Save helper: update state + localStorage
+  const updatePortfolio = useCallbackPort((updater) => {
+    setPortfolio(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      saveLocal(next);
+      setSource('local');
+      return next;
+    });
   }, []);
 
   const priceMap = useMemoPort(() => {
@@ -38,6 +95,38 @@ function PortfolioView() {
     scanData.signals.forEach(s => { map[s.ticker] = s; });
     return map;
   }, [scanData]);
+
+  const addPosition = () => {
+    const ticker = form.ticker.toUpperCase().trim();
+    const buyPrice = parseFloat(form.buyPrice);
+    const shares = parseFloat(form.shares);
+    if (!ticker || isNaN(buyPrice) || isNaN(shares) || buyPrice <= 0 || shares <= 0) return;
+    updatePortfolio(prev => ({
+      ...prev,
+      positions: [...prev.positions, { id: Date.now(), ticker, buyPrice, shares, date: form.date, cost: round2(buyPrice * shares) }],
+    }));
+    setForm({ ticker: '', buyPrice: '', shares: '', date: new Date().toISOString().slice(0, 10) });
+    setShowAdd(false);
+  };
+
+  const closePosition = (id) => {
+    const price = parseFloat(closePrice);
+    if (isNaN(price) || price <= 0) return;
+    const pos = portfolio.positions.find(p => p.id === id);
+    if (!pos) return;
+    const pnl = round2((price - pos.buyPrice) * pos.shares);
+    updatePortfolio(prev => ({
+      ...prev,
+      positions: prev.positions.filter(p => p.id !== id),
+      history: [...prev.history, { ...pos, closePrice: price, closeDate: new Date().toISOString().slice(0, 10), pnl }],
+    }));
+    setShowClose(null);
+    setClosePrice('');
+  };
+
+  const removePosition = (id) => {
+    updatePortfolio(prev => ({ ...prev, positions: prev.positions.filter(p => p.id !== id) }));
+  };
 
   const startingCash = portfolio.starting_cash || 1000;
   const totalInvested = portfolio.positions.reduce((s, p) => s + p.cost, 0);
@@ -52,30 +141,38 @@ function PortfolioView() {
   const totalReturn = totalValue - startingCash;
   const totalReturnPct = (totalReturn / startingCash) * 100;
 
-  if (loading) {
-    return (
-      <div style={{ padding: '60px 20px', textAlign: 'center' }}>
-        <div style={{ fontSize: 16, color: '#555' }}>Loading portfolio...</div>
-      </div>
-    );
-  }
+  const inputStyle = {
+    width: '100%', padding: '14px 16px', borderRadius: 12,
+    border: '1px solid #2a2a2a', background: '#111', color: '#fff',
+    fontSize: 16, outline: 'none', WebkitAppearance: 'none',
+  };
 
   return (
     <div style={{ padding: '16px 16px 24px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <h1 style={{ fontSize: 28, fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>Portfolio</h1>
+        <button onClick={() => setShowAdd(!showAdd)} style={{
+          padding: '10px 18px', borderRadius: 12, border: 'none',
+          background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 700,
+          cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+        }}>
+          + Add
+        </button>
       </div>
 
-      {/* Last updated */}
+      {/* Sync status */}
       <div style={{ marginBottom: 14, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{
           width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
-          background: portfolio.positions.length > 0 || portfolio.history.length > 0 ? '#4ade80' : '#555',
+          background: source === 'synced' ? '#4ade80' : source === 'local' ? '#fbbf24' : '#555',
         }} />
         <span style={{ color: '#555' }}>
-          {lastUpdated ? 'Updated ' + lastUpdated : 'Manage trades via GitHub Actions'}
+          {source === 'synced' ? 'Synced with GitHub' : source === 'local' ? 'Saved locally' : 'Loading...'}
         </span>
+        {source === 'local' && portfolio.positions.length > 0 && (
+          <span style={{ color: '#666' }}> — persist via Actions &rarr; Manage Trade</span>
+        )}
       </div>
 
       {/* Account value card */}
@@ -112,6 +209,59 @@ function PortfolioView() {
         </div>
       </div>
 
+      {/* Add form */}
+      {showAdd && (
+        <div style={{
+          padding: '20px', borderRadius: 20, marginBottom: 20,
+          background: '#111', border: '1px solid rgba(59,130,246,0.2)',
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 16 }}>Add Trade</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Ticker</div>
+              <input value={form.ticker} onChange={e => setForm({ ...form, ticker: e.target.value })}
+                placeholder="AAPL" style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Date</div>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Buy Price</div>
+              <input type="number" step="0.01" value={form.buyPrice}
+                onChange={e => setForm({ ...form, buyPrice: e.target.value })}
+                placeholder="0.00" style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Shares</div>
+              <input type="number" step="0.01" value={form.shares}
+                onChange={e => setForm({ ...form, shares: e.target.value })}
+                placeholder="0" style={inputStyle} />
+            </div>
+          </div>
+          {form.buyPrice && form.shares && (
+            <div style={{ fontSize: 14, color: '#fbbf24', fontWeight: 600, marginBottom: 16, textAlign: 'center' }}>
+              Total: ${(parseFloat(form.buyPrice || 0) * parseFloat(form.shares || 0)).toFixed(2)}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={addPosition} style={{
+              flex: 1, padding: '14px', borderRadius: 12, border: 'none',
+              background: '#22c55e', color: '#fff', fontSize: 15, fontWeight: 700,
+              cursor: 'pointer',
+            }}>Confirm</button>
+            <button onClick={() => setShowAdd(false)} style={{
+              flex: 1, padding: '14px', borderRadius: 12, border: '1px solid #333',
+              background: 'transparent', color: '#888', fontSize: 15, fontWeight: 700,
+              cursor: 'pointer',
+            }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       {/* Open positions */}
       {portfolio.positions.length > 0 && (
         <div style={{ marginBottom: 24 }}>
@@ -123,6 +273,7 @@ function PortfolioView() {
             const curPrice = sig ? sig.current_price : null;
             const pnl = curPrice ? (curPrice - pos.buyPrice) * pos.shares : null;
             const pnlPct = curPrice ? ((curPrice - pos.buyPrice) / pos.buyPrice) * 100 : null;
+            const isClosing = showClose === pos.id;
 
             return (
               <div key={pos.id} style={{
@@ -201,7 +352,7 @@ function PortfolioView() {
                   )}
 
                   {sig && (
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                       <div style={{
                         flex: 1, padding: '8px', background: '#1a0a0a', borderRadius: 8, textAlign: 'center',
                         border: '1px solid rgba(248,113,113,0.1)',
@@ -218,6 +369,34 @@ function PortfolioView() {
                       </div>
                     </div>
                   )}
+
+                  {!isClosing ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => { setShowClose(pos.id); setClosePrice(curPrice ? curPrice.toFixed(2) : ''); }} style={{
+                        flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                        background: '#fbbf24', color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      }}>Sell</button>
+                      <button onClick={() => removePosition(pos.id)} style={{
+                        padding: '12px 16px', borderRadius: 10, border: '1px solid #222',
+                        background: 'transparent', color: '#555', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      }}>Del</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input type="number" step="0.01" value={closePrice}
+                        onChange={e => setClosePrice(e.target.value)} placeholder="Sell price"
+                        style={{ ...inputStyle, flex: 1, padding: '12px 14px' }}
+                      />
+                      <button onClick={() => closePosition(pos.id)} style={{
+                        padding: '12px 18px', borderRadius: 10, border: 'none',
+                        background: '#22c55e', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      }}>OK</button>
+                      <button onClick={() => setShowClose(null)} style={{
+                        padding: '12px 14px', borderRadius: 10, border: '1px solid #333',
+                        background: 'transparent', color: '#888', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                      }}>X</button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -226,7 +405,7 @@ function PortfolioView() {
       )}
 
       {/* Empty state */}
-      {portfolio.positions.length === 0 && (
+      {portfolio.positions.length === 0 && !showAdd && (
         <div style={{
           padding: '40px 20px', borderRadius: 20, background: '#111',
           border: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', marginBottom: 24,
@@ -234,8 +413,7 @@ function PortfolioView() {
           <div style={{ fontSize: 36, marginBottom: 12 }}>$</div>
           <div style={{ fontSize: 17, color: '#888', fontWeight: 600, marginBottom: 6 }}>No positions yet</div>
           <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6 }}>
-            Check the Scan tab for buys, then go to<br/>
-            Actions &rarr; Manage Trade to log your trades.
+            Check the Scan tab, then tap + Add to log your trades.
           </div>
         </div>
       )}
@@ -266,6 +444,15 @@ function PortfolioView() {
               </div>
             </div>
           ))}
+          <button onClick={() => {
+            if (confirm('Clear closed trade history?')) {
+              updatePortfolio(prev => ({ ...prev, history: [] }));
+            }
+          }} style={{
+            width: '100%', padding: '12px', marginTop: 8, borderRadius: 12,
+            border: '1px solid #1a1a1a', background: 'transparent',
+            color: '#444', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Clear History</button>
         </div>
       )}
 
@@ -275,5 +462,7 @@ function PortfolioView() {
     </div>
   );
 }
+
+function round2(n) { return Math.round(n * 100) / 100; }
 
 window.PortfolioView = PortfolioView;
