@@ -568,7 +568,7 @@ def generate_orders(signals, regime, account_size):
     open_tickers = set(positions.keys()) - exit_tickers
     candidates = [
         s for s in signals
-        if abs(s.signal_strength) >= 3
+        if s.signal_strength >= 3
         and s.ticker not in open_tickers
         and s.ticker not in exit_tickers
     ]
@@ -587,23 +587,20 @@ def generate_orders(signals, regime, account_size):
 
         for priority, sig in enumerate(to_buy, start=1):
             raw_pct = sig.conviction_score / total_conviction
-            alloc_pct = raw_pct * 100
             dollar_alloc = available * raw_pct
 
-            risk_amount = min(dollar_alloc, account_size * RISK_PCT)
-            shares = int(risk_amount / sig.risk_per_share) if sig.risk_per_share > 0 else 0
+            # Dollar-based allocation with fractional shares (Robinhood supports this)
+            shares = round(dollar_alloc / sig.current_price, 2) if sig.current_price > 0 else 0
             dollar_amount = round(shares * sig.current_price, 2)
+            if dollar_amount < 1:
+                continue  # skip if position is negligible
             portfolio_pct = (dollar_amount / account_size) * 100
 
             reward = abs(sig.target_1 - sig.current_price)
             rr = f"{reward / sig.risk_per_share:.1f}:1" if sig.risk_per_share > 0 else "N/A"
 
-            if sig.signal_strength > 0:
-                action = "BUY"
-                opt = "SHARES — Market or limit order"
-            else:
-                action = "SHORT/AVOID"
-                opt = "SHARES — Avoid or wait for reversal"
+            action = "BUY"
+            opt = "SHARES — Market or limit order"
 
             buy_orders.append(Order(
                 action=action, ticker=sig.ticker, name=sig.name,
@@ -938,7 +935,7 @@ def main():
         for o in buy_orders:
             resp = input(f"  Executed {o.action} {o.ticker} {o.shares}sh? (y/n): ").strip().lower()
             if resp == "y":
-                direction = "LONG" if "CALL" in o.action else "SHORT"
+                direction = "LONG"
                 add_position(o.ticker, o.price, o.shares, o.stop_loss, o.target, direction, o.dollar_amount)
                 print(f"    ✓ {o.ticker} recorded")
         for o in sell_orders:
