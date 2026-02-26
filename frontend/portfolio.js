@@ -87,6 +87,34 @@ function PortfolioView() {
     return map;
   }, [scanData]);
 
+  // Build ticker dropdown: buy orders first (recommended), then all scanned tickers
+  const tickerOptions = useMemoPort(() => {
+    if (!scanData) return [];
+    const buyTickers = (scanData.buy_orders || []).map(o => ({
+      ticker: o.ticker, price: o.price, shares: o.shares, label: 'BUY',
+    }));
+    const otherTickers = (scanData.signals || [])
+      .filter(s => !buyTickers.some(b => b.ticker === s.ticker))
+      .map(s => ({
+        ticker: s.ticker, price: s.current_price, shares: 0, label: '',
+      }));
+    return [...buyTickers, ...otherTickers];
+  }, [scanData]);
+
+  const selectTicker = (ticker) => {
+    const opt = tickerOptions.find(o => o.ticker === ticker);
+    if (opt) {
+      setForm(prev => ({
+        ...prev,
+        ticker: opt.ticker,
+        buyPrice: opt.price ? String(opt.price) : prev.buyPrice,
+        shares: opt.shares ? String(opt.shares) : prev.shares,
+      }));
+    } else {
+      setForm(prev => ({ ...prev, ticker }));
+    }
+  };
+
   const addPosition = () => {
     const ticker = form.ticker.toUpperCase().trim();
     const buyPrice = parseFloat(form.buyPrice);
@@ -205,21 +233,36 @@ function PortfolioView() {
           background: '#111', border: '1px solid rgba(59,130,246,0.2)',
         }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 16 }}>Add Trade</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Ticker</div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Ticker</div>
+            {tickerOptions.length > 0 ? (
+              <select value={form.ticker} onChange={e => selectTicker(e.target.value)}
+                style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none',
+                  backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")',
+                  backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center',
+                }}>
+                <option value="">Select ticker...</option>
+                {tickerOptions.some(o => o.label === 'BUY') && (
+                  <optgroup label="Recommended Buys">
+                    {tickerOptions.filter(o => o.label === 'BUY').map(o => (
+                      <option key={o.ticker} value={o.ticker}>{o.ticker} — ${o.price.toFixed(2)} ({o.shares} sh)</option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="All Scanned">
+                  {tickerOptions.filter(o => o.label !== 'BUY').map(o => (
+                    <option key={o.ticker} value={o.ticker}>{o.ticker} — ${o.price.toFixed(2)}</option>
+                  ))}
+                </optgroup>
+              </select>
+            ) : (
               <input value={form.ticker} onChange={e => setForm({ ...form, ticker: e.target.value })}
                 placeholder="AAPL" style={inputStyle} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Date</div>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
-                style={inputStyle} />
-            </div>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Buy Price</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Price</div>
               <input type="number" step="0.01" value={form.buyPrice}
                 onChange={e => setForm({ ...form, buyPrice: e.target.value })}
                 placeholder="0.00" style={inputStyle} />
@@ -229,6 +272,11 @@ function PortfolioView() {
               <input type="number" step="0.01" value={form.shares}
                 onChange={e => setForm({ ...form, shares: e.target.value })}
                 placeholder="0" style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 6, fontWeight: 600 }}>Date</div>
+              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                style={inputStyle} />
             </div>
           </div>
           {form.buyPrice && form.shares && (
