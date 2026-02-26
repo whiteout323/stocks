@@ -97,7 +97,7 @@ LOOKBACK_DAYS = 80
 RISK_PCT = 0.02           # 2% risk per individual trade
 MAX_PORTFOLIO_RISK = 0.10 # 10% max total portfolio at risk
 MAX_POSITIONS = 5         # max simultaneous open positions
-ACCOUNT_SIZE = 25000      # default — override with --account
+ACCOUNT_SIZE = 1000       # default — override with --account
 
 # Resolve paths relative to the script location
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -599,11 +599,11 @@ def generate_orders(signals, regime, account_size):
             rr = f"{reward / sig.risk_per_share:.1f}:1" if sig.risk_per_share > 0 else "N/A"
 
             if sig.signal_strength > 0:
-                action = "BUY CALLS"
-                opt = "CALLS — ATM or 1 strike ITM, 30-45 DTE"
+                action = "BUY"
+                opt = "SHARES — Market or limit order"
             else:
-                action = "BUY PUTS"
-                opt = "PUTS — ATM or 1 strike ITM, 30-45 DTE"
+                action = "SHORT/AVOID"
+                opt = "SHARES — Avoid or wait for reversal"
 
             buy_orders.append(Order(
                 action=action, ticker=sig.ticker, name=sig.name,

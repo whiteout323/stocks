@@ -28,7 +28,7 @@ jobs:
       - name: Run scanner
         env:
           POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
-        run: python3 spy_momentum_scanner.py --data-source yahoo --json --quiet
+        run: python3 spy_momentum_scanner.py --data-source yahoo --json --quiet --account 1000
 
       - name: Commit scan results
         run: |

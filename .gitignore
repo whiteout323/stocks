@@ -3,7 +3,6 @@
 
 # Data files
 open_positions.json
-scan_logs/
 
 # Python
 __pycache__/
