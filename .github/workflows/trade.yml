@@ -1,0 +1,129 @@
+name: Manage Trade
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action'
+        required: true
+        type: choice
+        options:
+          - buy
+          - sell
+          - delete
+      ticker:
+        description: 'Ticker (e.g. AAPL)'
+        required: true
+        type: string
+      price:
+        description: 'Price per share'
+        required: true
+        type: string
+      shares:
+        description: 'Number of shares'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  update-portfolio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update portfolio.json
+        run: |
+          python3 -c "
+          import json, time, sys
+
+          PORTFOLIO_FILE = 'frontend/data/portfolio.json'
+
+          action = '${{ inputs.action }}'
+          ticker = '${{ inputs.ticker }}'.upper().strip()
+          price = float('${{ inputs.price }}')
+          shares = float('${{ inputs.shares }}')
+
+          with open(PORTFOLIO_FILE) as f:
+              portfolio = json.load(f)
+
+          today = time.strftime('%Y-%m-%d')
+          portfolio['last_updated'] = today
+
+          if action == 'buy':
+              portfolio['positions'].append({
+                  'id': int(time.time() * 1000),
+                  'ticker': ticker,
+                  'buyPrice': price,
+                  'shares': shares,
+                  'date': today,
+                  'cost': round(price * shares, 2),
+              })
+              print(f'Added BUY: {shares} shares of {ticker} @ \${price}')
+
+          elif action == 'sell':
+              found = None
+              for p in portfolio['positions']:
+                  if p['ticker'] == ticker:
+                      found = p
+                      break
+              if not found:
+                  print(f'ERROR: No open position for {ticker}')
+                  sys.exit(1)
+              pnl = round((price - found['buyPrice']) * found['shares'], 2)
+              portfolio['positions'] = [p for p in portfolio['positions'] if p['ticker'] != ticker]
+              portfolio['history'].append({
+                  **found,
+                  'closePrice': price,
+                  'closeDate': today,
+                  'pnl': pnl,
+              })
+              print(f'Closed {ticker}: P&L \${pnl:+.2f}')
+
+          elif action == 'delete':
+              before = len(portfolio['positions'])
+              portfolio['positions'] = [p for p in portfolio['positions'] if p['ticker'] != ticker]
+              if len(portfolio['positions']) == before:
+                  print(f'No position found for {ticker}')
+                  sys.exit(1)
+              print(f'Deleted {ticker} from positions')
+
+          with open(PORTFOLIO_FILE, 'w') as f:
+              json.dump(portfolio, f, indent=2)
+              f.write('\n')
+
+          print('Portfolio updated successfully')
+          print(f'Open positions: {len(portfolio[\"positions\"])}')
+          print(f'Closed trades: {len(portfolio[\"history\"])}')
+          "
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add frontend/data/portfolio.json
+          git diff --cached --quiet || git commit -m "trade: ${{ inputs.action }} ${{ inputs.ticker }} ${{ inputs.shares }}sh @ \$${{ inputs.price }}"
+          git push
+
+  deploy:
+    needs: update-portfolio
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/configure-pages@v4
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
