@@ -1,5 +1,5 @@
 /* Live Scan View — iOS phone-first, action-focused */
-const { useState: useStateLive, useEffect: useEffectLive, useMemo: useMemoLive } = React;
+const { useState: useStateLive, useEffect: useEffectLive } = React;
 
 function LiveScanView() {
   const [scanData, setScanData] = useStateLive(null);
