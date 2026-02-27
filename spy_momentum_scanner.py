@@ -33,7 +33,7 @@ import time
 import argparse
 import logging
 import tempfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict
 from typing import Optional
 
@@ -861,7 +861,7 @@ def save_scan_log(signals, regime, buy_orders, sell_orders, manage_orders,
     fp = os.path.join(output_dir, f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
     with open(fp, "w") as f:
         json.dump({
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "regime": asdict(regime),
             "signals": [asdict(s) for s in signals],
             "buy_orders": [asdict(o) for o in buy_orders],
@@ -944,7 +944,7 @@ def main():
     os.makedirs(frontend_data_dir, exist_ok=True)
     latest_path = os.path.join(frontend_data_dir, "latest-scan.json")
     scan_data = {
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "regime": asdict(regime),
         "signals": [asdict(s) for s in signals],
         "buy_orders": [asdict(o) for o in buy_orders],
