@@ -14,6 +14,9 @@ permissions:
 jobs:
   scan:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,17 +42,6 @@ jobs:
           git add scan_logs/ 2>/dev/null || true
           git diff --cached --quiet || git commit -m "scan: $(date -u '+%Y-%m-%d %H:%M') UTC"
           git push
-
-  deploy:
-    needs: scan
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main  # Get the latest commit with scan data
 
       - uses: actions/configure-pages@v4
 
