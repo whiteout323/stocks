@@ -1,4 +1,4 @@
-const CACHE_NAME = "spy-scanner-v5";
+const CACHE_NAME = "spy-scanner-v6";
 const ASSETS = [
   "./",
   "./index.html",
